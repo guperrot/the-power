@@ -62,6 +62,7 @@ echo "$app_installs" | jq -c '.[]' | while read -r install; do
       #echo "   Response: $json_body"
     fi
   ) &
+  sleep 0.009
   done
   wait
 done
