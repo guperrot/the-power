@@ -10,7 +10,11 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 if [ -n "$1" ]; then
-  org_max_suffix=$1
+  ending_org=$1
+fi
+
+if [ -n "$2" ]; then
+  starting_org=$2
 fi
 
 list_enterprise_team_members_output=$(./list-enterprise-team-members.sh "$team")
@@ -24,20 +28,21 @@ app_installs=$(./tiny-list-app-installations.sh)
 repo=${repo:-"private-repo-1"}
 
 # Iterate over each installation
-echo "$app_installs" | jq -c '.[]' | while read -r install; do
+echo "$app_installs" | jq -c '. | sort_by(.account.login) | .[]' | while read -r install; do
   install_id=$(echo "$install" | jq -r '.id')
   org=$(echo "$install" | jq -r '.account.login')
   if [ -z "$org" ] || [ "$org" = "null" ]; then
     continue
   fi
 
-  # Only process orgs with suffix less than passed suffix
-  if [ -n "$org_max_suffix" ]; then
-    org_suffix=$(echo "$org" | sed "s/^batch-org-//")
-    if ! [[ "$org_suffix" =~ ^[0-9]+$ ]]; then
+  if [ -n "$starting_org" ]; then
+    if [[ "$org" < "$starting_org" ]]; then
       continue
     fi
-    if [[ "$org_suffix" > "$org_max_suffix" ]]; then
+  fi
+
+  if [ -n "$ending_org" ]; then
+    if [[ "$org" > "$ending_org" ]]; then
       continue
     fi
   fi
@@ -46,23 +51,23 @@ echo "$app_installs" | jq -c '.[]' | while read -r install; do
   GITHUB_TOKEN=$(./ent-call-get-installation-token.sh  $install_id | jq -r '.token')
 
   for username in $usernames; do
-  (
-    response=$(curl -s -w "\n%{http_code}" -X PUT \
-      -H "Authorization: Bearer $GITHUB_TOKEN" \
-      -H "Accept: application/vnd.github+json" \
-      -d "{\"permission\":\"triage\"}" \
-    "$GITHUB_API_BASE_URL/repos/$org/$repo/collaborators/$username")
-    http_code=$(echo "$response" | tail -n1)
-    json_body=$(echo "$response" | sed '$d')
+    (
+      response=$(curl -s -w "\n%{http_code}" -X PUT \
+        -H "Authorization: Bearer $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github+json" \
+        -d "{\"permission\":\"triage\"}" \
+      "$GITHUB_API_BASE_URL/repos/$org/$repo/collaborators/$username")
+      http_code=$(echo "$response" | tail -n1)
+      json_body=$(echo "$response" | sed '$d')
 
-    if [[ "$http_code" == "201" ]] || [[ "$http_code" == "204" ]]; then
-      echo "   ✅ Repo permissions assigned to $username"
-    else
-      echo "   ❌ Failed to assign repo permissions (HTTP $http_code) for $username"
-      #echo "   Response: $json_body"
-    fi
-  ) &
-  sleep 0.009
+      if [[ "$http_code" == "201" ]] || [[ "$http_code" == "204" ]]; then
+        echo "   ✅ Repo permissions assigned to $username"
+      else
+        echo "   ❌ Failed to assign repo permissions (HTTP $http_code) for $username"
+        #echo "   Response: $json_body"
+      fi
+    ) &
+    sleep 0.019
   done
   wait
 done
