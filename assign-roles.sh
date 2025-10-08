@@ -93,7 +93,7 @@ echo "$app_installs" | jq -c '. | sort_by(.account.login) | .[]' | while read -r
         echo "   ❌ Failed to assign role to $username in $org (HTTP $http_code)"
       fi
     ) &
-    sleep 0.009
+    sleep 0.019
   done
   wait
 done
